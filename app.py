@@ -16,86 +16,54 @@ with st.sidebar:
     st.info("Obtém a tua chave grátis em: aistudio.google.com")
     
     st.divider()
-    st.header("🎭 Estilo & Plataforma")
+    st.header("🎭 Personalização")
     plataforma = st.selectbox("Destino", ["Instagram Reels", "TikTok", "YouTube Shorts"])
-    estilo = st.selectbox("Tipo de Conteúdo", ["Tutorial Rápido", "Storytelling Emocional", "Venda/Conversão", "Humor/Trend"])
-    criatividade = st.slider("Nível de Criatividade", 0.0, 1.0, 0.7)
+    estilo = st.selectbox("Tipo", ["Tutorial Rápido", "Storytelling", "Venda", "Humor"])
 
-# --- LÓGICA DO GEMINI ---
-def gerar_roteiro_gemini(tema, plataforma, estilo, key, criatividade):
-    # Configurar a API
+# --- FUNÇÃO DE GERAÇÃO (CORRIGIDA) ---
+def gerar_roteiro(tema, plataforma, estilo, key):
     genai.configure(api_key=key)
     
-    # Configuração do Modelo (Focado no formato JSON)
-    generation_config = {
-        "temperature": criatividade,
-        "top_p": 0.95,
-        "response_mime_type": "application/json",
-    }
-    
-    # Correção do Erro 404: Usar o caminho completo do modelo
+    # Tentamos o modelo Flash. Se der erro, o código avisa.
     model = genai.GenerativeModel(
-        model_name="models/gemini-1.5-flash",
-        generation_config=generation_config
+        model_name="gemini-1.5-flash",
+        generation_config={"response_mime_type": "application/json"}
     )
 
-    # Prompt construído com cuidado para evitar erros de sintaxe no Python
-    prompt = (
-        f"És um guionista especialista em vídeos curtos para {plataforma}. "
-        f"Tema: {tema}. Estilo: {estilo}. "
-        "Gera um guião estruturado no seguinte formato JSON estrito: "
-        "{"
-        "\"hook_texto\": \"frase de impacto\", "
-        "\"hook_visual\": \"descrição da primeira cena\", "
-        "\"cenas\": ["
-        "{\"Cena\": 1, \"Voz\": \"fala\", \"Vídeo\": \"ação\", \"Plano\": \"enquadramento\", \"Som\": \"audio\"}"
-        "], "
-        "\"cta\": \"chamada para ação final\""
-        "}"
-    )
+    prompt = f"""
+    Cria um guião de vídeo curto para {plataforma} sobre {tema}. Estilo {estilo}.
+    Responde apenas com este JSON:
+    {{
+      "hook_texto": "frase",
+      "hook_visual": "descrição",
+      "cenas": [
+        {{"Cena": 1, "Voz": "texto", "Vídeo": "ação", "Plano": "tipo", "Som": "audio"}}
+      ],
+      "cta": "frase"
+    }}
+    """
 
     response = model.generate_content(prompt)
     return json.loads(response.text)
 
-# --- INTERFACE PRINCIPAL ---
-tema_input = st.text_area("Sobre o que queres falar hoje?", placeholder="Ex: Por que é que o café sabe melhor de manhã?")
+# --- INTERFACE ---
+tema_input = st.text_input("Qual o tema do vídeo?")
 
-if st.button("🚀 Gerar Guião com Gemini"):
+if st.button("🚀 Gerar Guião"):
     if not gemini_key:
-        st.error("Esqueceste-te da API Key na barra lateral!")
+        st.error("Insere a tua API Key!")
     elif tema_input:
-        with st.spinner("O Gemini está a escrever o teu próximo viral..."):
+        with st.spinner("A processar..."):
             try:
-                res = gerar_roteiro_gemini(tema_input, plataforma, estilo, gemini_key, criatividade)
+                res = gerar_roteiro(tema_input, plataforma, estilo, gemini_key)
                 
-                # Exibição de Resumo
-                st.divider()
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.success("🪝 Gancho de Texto")
-                    st.subheader(res.get('hook_texto', 'Sem gancho'))
-                with col2:
-                    st.info("👁️ Gancho Visual")
-                    st.write(res.get('hook_visual', 'Sem descrição'))
-
-                # Tabela Editável
-                st.subheader("📝 Storyboard Detalhado (Clica para editar)")
-                if 'cenas' in res:
-                    df = pd.DataFrame(res['cenas'])
-                    df_final = st.data_editor(df, use_container_width=True, num_rows="dynamic")
-                    
-                    st.warning(f"📣 **CTA Sugerido:** {res.get('cta', 'Sem CTA')}")
-
-                    # Botão de Exportar
-                    csv = df_final.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="💾 Descarregar para Excel (CSV)",
-                        data=csv,
-                        file_name="guiao_gemini.csv",
-                        mime="text/csv",
-                    )
-                else:
-                    st.error("A IA não gerou as cenas corretamente. Tenta de novo.")
+                st.subheader(f"🪝 Gancho: {res['hook_texto']}")
+                
+                df = pd.DataFrame(res['cenas'])
+                st.data_editor(df, use_container_width=True)
+                
+                st.success(f"📣 CTA: {res['cta']}")
                 
             except Exception as e:
-                st.error(f"Erro ao processar: {e}")
+                st.error(f"Erro: {e}")
+                st.info("Dica: Se o erro for 404, verifica se a tua chave API no Google AI Studio tem acesso ao modelo Gemini 1.5 Flash.")
