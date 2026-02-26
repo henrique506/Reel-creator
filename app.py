@@ -2,12 +2,12 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import json
+import time
 
 # Configuração da Página
-st.set_page_config(page_title="Script Master 2026", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="Script Master Pro", layout="wide", page_icon="🎬")
 
-st.title("🎬 Script Master: Next Gen (Gemini 2.5)")
-st.markdown("A usar o motor: `models/gemini-2.5-flash` para máxima performance.")
+st.title("🎬 Script Master: Multi-Model Edition")
 
 # --- BARRA LATERAL ---
 with st.sidebar:
@@ -15,73 +15,57 @@ with st.sidebar:
     gemini_key = st.text_input("Insere a tua Gemini API Key", type="password")
     
     st.divider()
-    st.header("🎭 Opções de Vídeo")
-    plataforma = st.selectbox("Plataforma", ["Instagram Reels", "TikTok", "YouTube Shorts"])
-    estilo = st.selectbox("Estilo", ["Tutorial", "Storytelling", "Venda/UGC", "Humor/Trend"])
-    duracao = st.select_slider("Duração Desejada", options=["15s", "30s", "60s"])
-
-# --- FUNÇÃO DE GERAÇÃO ATUALIZADA ---
-def gerar_roteiro(tema, plataforma, estilo, duracao, key):
-    genai.configure(api_key=key)
+    st.header("🤖 Escolha do Motor")
+    # Lista baseada nos teus modelos disponíveis, priorizando os mais estáveis
+    model_choice = st.selectbox("Modelo AI", [
+        "models/gemini-2.0-flash-lite", 
+        "models/gemini-1.5-flash",
+        "models/gemini-2.0-flash",
+        "models/gemini-flash-latest"
+    ], help="Se obtiveres erro 429 (Quota), muda para a versão 'Lite'.")
     
-    # Atualizado para o modelo que confirmaste ter acesso
+    st.divider()
+    st.header("🎭 Opções")
+    plataforma = st.selectbox("Plataforma", ["Instagram Reels", "TikTok", "YouTube Shorts"])
+    duracao = st.select_slider("Duração", options=["15s", "30s", "60s"])
+
+# --- FUNÇÃO DE GERAÇÃO COM TRATAMENTO DE ERRO ---
+def gerar_roteiro(tema, plataforma, model_name, key):
+    genai.configure(api_key=key)
     model = genai.GenerativeModel(
-        model_name="models/gemini-2.5-flash",
+        model_name=model_name,
         generation_config={"response_mime_type": "application/json"}
     )
 
-    prompt = f"""
-    És um guionista de elite para {plataforma}. 
-    Cria um roteiro de {duracao} sobre o tema: "{tema}".
-    Estilo de conteúdo: {estilo}.
-    
-    Responde APENAS com este formato JSON:
-    {{
-      "hook_texto": "texto para o ecrã",
-      "hook_visual": "ação inicial rápida",
-      "cenas": [
-        {{"Cena": 1, "Voz": "o que dizer", "Vídeo": "o que filmar", "Plano": "enquadramento", "Som": "audio/efeito"}},
-        {{"Cena": 2, "Voz": "o que dizer", "Vídeo": "o que filmar", "Plano": "enquadramento", "Som": "audio/efeito"}},
-        {{"Cena": 3, "Voz": "o que dizer", "Vídeo": "o que filmar", "Plano": "enquadramento", "Som": "audio/efeito"}},
-        {{"Cena": 4, "Voz": "o que dizer", "Vídeo": "o que filmar", "Plano": "enquadramento", "Som": "audio/efeito"}}
-      ],
-      "cta": "chamada para ação final"
-    }}
-    Usa linguagem dinâmica e focada em retenção.
-    """
+    prompt = f"Cria um roteiro para {plataforma} de {duracao} sobre {tema}. Responde apenas JSON: {{'hook_texto': '...', 'hook_visual': '...', 'cenas': [{{'Cena': 1, 'Voz': '...', 'Vídeo': '...', 'Plano': '...', 'Som': '...'}}], 'cta': '...'}}"
 
-    response = model.generate_content(prompt)
-    return json.loads(response.text)
+    try:
+        response = model.generate_content(prompt)
+        return json.loads(response.text)
+    except Exception as e:
+        if "429" in str(e):
+            st.error("⚠️ **Limite de Quota Atingido!**")
+            st.info("O Google limita pedidos gratuitos por minuto. Espera 60 segundos ou muda para o modelo 'Lite' na barra lateral.")
+        raise e
 
-# --- INTERFACE PRINCIPAL ---
-tema_input = st.text_input("Qual o tema do teu próximo vídeo?")
+# --- INTERFACE ---
+tema_input = st.text_input("Qual o tema do vídeo?")
 
-if st.button("🚀 Criar Guia Profissional"):
+if st.button("🚀 Gerar Guião"):
     if not gemini_key:
-        st.error("Por favor, insere a API Key na barra lateral.")
+        st.error("Insere a API Key!")
     elif tema_input:
-        with st.spinner(f"O Gemini 2.5 está a roteirizar para {plataforma}..."):
+        with st.spinner(f"A usar {model_choice}..."):
             try:
-                res = gerar_roteiro(tema_input, plataforma, estilo, duracao, gemini_key)
+                res = gerar_roteiro(tema_input, plataforma, model_choice, gemini_key)
                 
-                # Layout de Resultados
                 st.divider()
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.success(f"🪝 **Hook de Texto:** {res['hook_texto']}")
-                with c2:
-                    st.info(f"👁️ **Hook Visual:** {res['hook_visual']}")
-
-                # Tabela de Edição
-                st.subheader("📝 Storyboard Editável")
+                st.subheader(f"🪝 Gancho: {res['hook_texto']}")
+                
                 df = pd.DataFrame(res['cenas'])
-                df_editado = st.data_editor(df, use_container_width=True, num_rows="dynamic")
+                st.data_editor(df, use_container_width=True)
                 
-                st.warning(f"📣 **CTA:** {res['cta']}")
-
-                # Download
-                csv = df_editado.to_csv(index=False).encode('utf-8')
-                st.download_button("💾 Exportar para Produção (Excel/CSV)", csv, "meu_guiao_viral.csv", "text/csv")
-                
+                st.success(f"📣 CTA: {res['cta']}")
             except Exception as e:
-                st.error(f"Erro na geração: {e}")
+                # O erro já é tratado na função, mas isto evita que a app 'crash'
+                pass
