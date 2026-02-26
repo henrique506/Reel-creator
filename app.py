@@ -32,7 +32,7 @@ def gerar_roteiro_gemini(tema, plataforma, estilo, key, criatividade):
         "response_mime_type": "application/json",
     }
     
-    model = genai.GenerativeModel(
+    model = genai.GenerativeModel(model_name="models/gemini-1.5-flash", ...)
         model_name="gemini-1.5-flash",
         generation_config=generation_config
     )
