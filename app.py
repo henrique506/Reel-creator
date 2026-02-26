@@ -4,93 +4,74 @@ from openai import OpenAI
 import json
 
 # Configuração da Página
-st.set_page_config(page_title="Script Master Pro", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="Script Master AI: Vision", layout="wide", page_icon="🎬")
 
-st.title("🎬 Script Master Pro: Edição em Tempo Real")
-st.markdown("A IA gera o rascunho, **tu assumes a direção.**")
+st.title("🎬 Script Master AI: Vision Edition")
+st.markdown("O teu guião, do texto à imagem.")
 
 # --- BARRA LATERAL ---
 with st.sidebar:
-    st.header("🔑 Configuração")
-    api_key = st.text_input("Insere a tua OpenAI API Key", type="password")
+    st.header("🔑 Chaves de Acesso")
+    api_key = st.text_input("OpenAI API Key", type="password")
     
     st.divider()
-    st.header("⚙️ Definições")
+    st.header("🎭 Estilo Visual")
+    vibe_visual = st.selectbox("Estética das Imagens", 
+                                ["Cinemático", "Vlog Realista", "Minimalista/Clean", "Anime/Ilustração", "Estilo Estúdio Profissional"])
     plataforma = st.selectbox("Plataforma", ["Instagram Reels", "TikTok", "YouTube Shorts"])
-    tom = st.selectbox("Tom", ["Profissional", "Engraçado", "Inspirador", "Dinâmico"])
-    st.info("💡 Dica: Depois de gerar, podes clicar em qualquer célula da tabela para alterar o conteúdo!")
+    estilo_conteudo = st.selectbox("Estilo", ["Tutorial", "Storytelling", "Viral", "Venda"])
 
-# --- FUNÇÃO DE IA ---
-def obter_guiao_ia(tema, plataforma, tom, api_key):
+# --- FUNÇÃO DE IA (TEXTO) ---
+def gerar_guiao_texto(tema, plataforma, estilo, api_key):
     client = OpenAI(api_key=api_key)
-    
-    # Prompt técnico para garantir que a IA devolve dados estruturados
-    prompt = f"""
-    Cria um guião de vídeo curto para {plataforma} sobre "{tema}" em tom {tom}.
-    Responde APENAS com um objeto JSON no seguinte formato:
-    {{
-      "hook_texto": "frase",
-      "hook_visual": "descrição",
-      "cenas": [
-        {{"Cena": 1, "Voz": "texto", "Vídeo": "ação", "Plano": "tipo", "Som": "efeito"}},
-        ...
-      ],
-      "cta": "frase"
-    }}
-    """
+    prompt = f"Cria um guião para {plataforma} sobre {tema}. Estilo {estilo}. Responde apenas JSON com: hook_texto, hook_visual, cta, e cenas (lista com Cena, Voz, Vídeo, Plano, Som, Prompt_Imagem_Dalle)."
     
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "system", "content": "És um realizador de vídeos virais."},
-                  {"role": "user", "content": prompt}],
+        messages=[{"role": "user", "content": prompt}],
         response_format={ "type": "json_object" }
     )
     return json.loads(response.choices[0].message.content)
 
+# --- FUNÇÃO DE IA (IMAGEM) ---
+def gerar_imagem_storyboard(prompt_cena, estilo_visual, api_key):
+    client = OpenAI(api_key=api_key)
+    full_prompt = f"Storyboard frame: {prompt_cena}. Style: {estilo_visual}. 9:16 aspect ratio feel, professional cinematography."
+    
+    response = client.images.generate(
+        model="dall-e-3",
+        prompt=full_prompt,
+        size="1024x1024", # Nota: DALL-E 3 gera quadrado, mas podemos simular o enquadramento
+        quality="standard",
+        n=1,
+    )
+    return response.data[0].url
+
 # --- INTERFACE PRINCIPAL ---
-tema_input = st.text_input("Qual é o tema do vídeo?", placeholder="Ex: Como organizar a secretária para produtividade")
+tema = st.text_input("Tema do Vídeo", placeholder="Ex: Como fazer o pequeno-almoço perfeito em 2 minutos")
 
-if st.button("🚀 Gerar Storyboard Editável"):
-    if not api_key:
-        st.error("Insere a tua API Key na barra lateral.")
-    elif tema_input:
-        with st.spinner("A criar o teu guião..."):
-            try:
-                res = obter_guiao_ia(tema_input, plataforma, tom, api_key)
-                
-                # Exibir Hooks em destaque
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.subheader("🪝 Ganchos (Hooks)")
-                    st.write(f"**Texto:** {res['hook_texto']}")
-                    st.write(f"**Visual:** {res['hook_visual']}")
-                with col2:
-                    st.subheader("📢 Call to Action")
-                    st.info(res['cta'])
+if st.button("1. Gerar Estrutura de Texto"):
+    if api_key and tema:
+        st.session_state.guiao = gerar_guiao_texto(tema, plataforma, estilo_conteudo, api_key)
+        st.success("Guião de texto pronto!")
 
-                st.divider()
-                st.subheader("📝 Tabela de Produção (Clica para Editar)")
-                
-                # Criar DataFrame a partir do JSON da IA
-                df_inicial = pd.DataFrame(res['cenas'])
-                
-                # O EDITOR MÁGICO
-                # O utilizador pode editar, adicionar ou remover linhas aqui
-                df_editado = st.data_editor(
-                    df_inicial, 
-                    num_rows="dynamic", 
-                    use_container_width=True
-                )
+if "guiao" in st.session_state:
+    res = st.session_state.guiao
+    
+    st.subheader("📝 Edita o teu roteiro")
+    df_editado = st.data_editor(pd.DataFrame(res['cenas']), use_container_width=True)
+    
+    st.divider()
+    
+    if st.button("🎨 2. Gerar Storyboard Visual (IA)"):
+        with st.spinner("A desenhar as tuas cenas..."):
+            colunas_img = st.columns(len(df_editado))
+            for i, row in df_editado.iterrows():
+                with colunas_img[i]:
+                    st.caption(f"Cena {row['Cena']}")
+                    img_url = gerar_imagem_storyboard(row['Prompt_Imagem_Dalle'], vibe_visual, api_key)
+                    st.image(img_url, use_column_width=True)
+                    st.info(f"🎥 {row['Plano']}")
 
-                # Opção de Download do ficheiro final
-                st.divider()
-                csv = df_editado.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="💾 Descarregar Guião Finalizado",
-                    data=csv,
-                    file_name=f"guiao_{tema_input.replace(' ', '_')}.csv",
-                    mime="text/csv",
-                )
-                
-            except Exception as e:
-                st.error(f"Erro: {e}")
+# Rodapé informando sobre custos
+st.sidebar.warning("⚠️ Nota: O DALL-E 3 tem um custo por imagem gerada na tua conta OpenAI.")
