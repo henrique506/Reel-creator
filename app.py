@@ -4,40 +4,42 @@ import google.generativeai as genai
 import json
 
 # Configuração da Página
-st.set_page_config(page_title="Script Master: Gemini Edition", layout="wide", page_icon="♊")
+st.set_page_config(page_title="Script Master AI", layout="wide", page_icon="🎬")
 
-st.title("♊ Script Master: Gemini AI")
-st.markdown("Cria guiões virais usando o motor mais avançado da Google.")
+st.title("🎬 Script Master: Gemini Edition")
 
 # --- BARRA LATERAL ---
 with st.sidebar:
     st.header("🔑 Configuração")
     gemini_key = st.text_input("Insere a tua Gemini API Key", type="password")
-    st.info("Obtém a tua chave grátis em: aistudio.google.com")
     
     st.divider()
-    st.header("🎭 Personalização")
-    plataforma = st.selectbox("Destino", ["Instagram Reels", "TikTok", "YouTube Shorts"])
-    estilo = st.selectbox("Tipo", ["Tutorial Rápido", "Storytelling", "Venda", "Humor"])
+    st.header("🎭 Opções")
+    plataforma = st.selectbox("Plataforma", ["Instagram Reels", "TikTok", "YouTube Shorts"])
+    estilo = st.selectbox("Estilo", ["Tutorial", "Storytelling", "Venda", "Viral"])
 
-# --- FUNÇÃO DE GERAÇÃO (CORRIGIDA) ---
+# --- FUNÇÃO DE GERAÇÃO ROBUSTA ---
 def gerar_roteiro(tema, plataforma, estilo, key):
     genai.configure(api_key=key)
     
-    # Tentamos o modelo Flash. Se der erro, o código avisa.
+    # Tentamos os nomes mais comuns do modelo 1.5 Flash
+    # O 'gemini-1.5-flash' é o ID padrão atual
+    model_id = "gemini-1.5-flash" 
+    
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
+        model_name=model_id,
         generation_config={"response_mime_type": "application/json"}
     )
 
     prompt = f"""
-    Cria um guião de vídeo curto para {plataforma} sobre {tema}. Estilo {estilo}.
-    Responde apenas com este JSON:
+    És um guionista de vídeos curtos. Cria um roteiro para {plataforma} sobre {tema}. Estilo {estilo}.
+    Responde APENAS com este JSON:
     {{
       "hook_texto": "frase",
       "hook_visual": "descrição",
       "cenas": [
-        {{"Cena": 1, "Voz": "texto", "Vídeo": "ação", "Plano": "tipo", "Som": "audio"}}
+        {{"Cena": 1, "Voz": "fala", "Vídeo": "ação", "Plano": "tipo", "Som": "audio"}},
+        {{"Cena": 2, "Voz": "fala", "Vídeo": "ação", "Plano": "tipo", "Som": "audio"}}
       ],
       "cta": "frase"
     }}
@@ -51,19 +53,25 @@ tema_input = st.text_input("Qual o tema do vídeo?")
 
 if st.button("🚀 Gerar Guião"):
     if not gemini_key:
-        st.error("Insere a tua API Key!")
+        st.error("Por favor, insere a API Key!")
     elif tema_input:
-        with st.spinner("A processar..."):
+        with st.spinner("A ligar ao cérebro do Gemini..."):
             try:
                 res = gerar_roteiro(tema_input, plataforma, estilo, gemini_key)
                 
-                st.subheader(f"🪝 Gancho: {res['hook_texto']}")
+                st.info(f"🪝 **Gancho:** {res['hook_texto']}")
                 
+                # Tabela de Cenas
                 df = pd.DataFrame(res['cenas'])
-                st.data_editor(df, use_container_width=True)
+                st.subheader("📝 Roteiro Editável")
+                df_final = st.data_editor(df, use_container_width=True, num_rows="dynamic")
                 
-                st.success(f"📣 CTA: {res['cta']}")
+                st.success(f"📣 **CTA:** {res['cta']}")
+                
+                # Exportar
+                csv = df_final.to_csv(index=False).encode('utf-8')
+                st.download_button("💾 Baixar Excel (CSV)", csv, "meu_guiao.csv", "text/csv")
                 
             except Exception as e:
                 st.error(f"Erro: {e}")
-                st.info("Dica: Se o erro for 404, verifica se a tua chave API no Google AI Studio tem acesso ao modelo Gemini 1.5 Flash.")
+                st.warning("Dica: Verifica se a tua chave API no Google AI Studio (aistudio.google.com) está ativa.")
