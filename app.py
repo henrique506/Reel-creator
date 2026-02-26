@@ -1,77 +1,103 @@
 import streamlit as st
 import pandas as pd
-from openai import OpenAI
+import google.generativeai as genai
 import json
 
 # Configuração da Página
-st.set_page_config(page_title="Script Master AI: Vision", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="Script Master: Gemini Edition", layout="wide", page_icon="♊")
 
-st.title("🎬 Script Master AI: Vision Edition")
-st.markdown("O teu guião, do texto à imagem.")
+st.title("♊ Script Master: Gemini AI")
+st.markdown("Cria guiões virais usando o motor mais avançado da Google.")
 
 # --- BARRA LATERAL ---
 with st.sidebar:
-    st.header("🔑 Chaves de Acesso")
-    api_key = st.text_input("OpenAI API Key", type="password")
+    st.header("🔑 Configuração")
+    gemini_key = st.text_input("Insere a tua Gemini API Key", type="password")
+    st.info("Obtém a tua chave grátis em: aistudio.google.com")
     
     st.divider()
-    st.header("🎭 Estilo Visual")
-    vibe_visual = st.selectbox("Estética das Imagens", 
-                                ["Cinemático", "Vlog Realista", "Minimalista/Clean", "Anime/Ilustração", "Estilo Estúdio Profissional"])
-    plataforma = st.selectbox("Plataforma", ["Instagram Reels", "TikTok", "YouTube Shorts"])
-    estilo_conteudo = st.selectbox("Estilo", ["Tutorial", "Storytelling", "Viral", "Venda"])
+    st.header("🎭 Estilo & Plataforma")
+    plataforma = st.selectbox("Destino", ["Instagram Reels", "TikTok", "YouTube Shorts"])
+    estilo = st.selectbox("Tipo de Conteúdo", ["Tutorial Rápido", "Storytelling Emocional", "Venda/Conversão", "Humor/Trend"])
+    criatividade = st.slider("Nível de Criatividade", 0.0, 1.0, 0.7)
 
-# --- FUNÇÃO DE IA (TEXTO) ---
-def gerar_guiao_texto(tema, plataforma, estilo, api_key):
-    client = OpenAI(api_key=api_key)
-    prompt = f"Cria um guião para {plataforma} sobre {tema}. Estilo {estilo}. Responde apenas JSON com: hook_texto, hook_visual, cta, e cenas (lista com Cena, Voz, Vídeo, Plano, Som, Prompt_Imagem_Dalle)."
+# --- LÓGICA DO GEMINI ---
+def gerar_roteiro_gemini(tema, plataforma, estilo, key, criatividade):
+    genai.configure(api_key=key)
     
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        response_format={ "type": "json_object" }
+    # Configuração do Modelo
+    generation_config = {
+        "temperature": criatividade,
+        "top_p": 0.95,
+        "response_mime_type": "application/json",
+    }
+    
+    model = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        generation_config=generation_config
     )
-    return json.loads(response.choices[0].message.content)
 
-# --- FUNÇÃO DE IA (IMAGEM) ---
-def gerar_imagem_storyboard(prompt_cena, estilo_visual, api_key):
-    client = OpenAI(api_key=api_key)
-    full_prompt = f"Storyboard frame: {prompt_cena}. Style: {estilo_visual}. 9:16 aspect ratio feel, professional cinematography."
+    prompt = f"""
+    És um guionista especialista em vídeos curtos para {plataforma}. 
+    Tema: {tema}. Estilo: {estilo}.
     
-    response = client.images.generate(
-        model="dall-e-3",
-        prompt=full_prompt,
-        size="1024x1024", # Nota: DALL-E 3 gera quadrado, mas podemos simular o enquadramento
-        quality="standard",
-        n=1,
-    )
-    return response.data[0].url
+    Gera um guião estruturado no seguinte formato JSON estrito:
+    {{
+      "hook_texto": "frase de impacto",
+      "hook_visual": "descrição da primeira cena",
+      "cenas": [
+        {{"Cena": 1, "Voz": "fala", "Vídeo": "ação", "Plano": "enquadramento", "Som": "audio"}},
+        {{"Cena": 2, "Voz": "fala", "Vídeo": "ação", "Plano": "enquadramento", "Som": "audio"}},
+        {{"Cena": 3, "Voz": "fala", "Vídeo": "ação", "Plano": "enquadramento", "Som": "audio"}}
+      ],
+      "cta": "chamada para ação final"
+    }}
+    Usa termos de cinema para os planos (POV, Close-up, Plano Médio).
+    """
+
+    response = model.generate_content(prompt)
+    return json.loads(response.text)
 
 # --- INTERFACE PRINCIPAL ---
-tema = st.text_input("Tema do Vídeo", placeholder="Ex: Como fazer o pequeno-almoço perfeito em 2 minutos")
+tema_input = st.text_area("Sobre o que queres falar hoje?", placeholder="Ex: Por que é que o café sabe melhor de manhã?")
 
-if st.button("1. Gerar Estrutura de Texto"):
-    if api_key and tema:
-        st.session_state.guiao = gerar_guiao_texto(tema, plataforma, estilo_conteudo, api_key)
-        st.success("Guião de texto pronto!")
+if st.button("🚀 Gerar Guião com Gemini"):
+    if not gemini_key:
+        st.error("Esqueceste-te da API Key na barra lateral!")
+    elif tema_input:
+        with st.spinner("O Gemini está a escrever o teu próximo viral..."):
+            try:
+                res = gerar_roteiro_gemini(tema_input, plataforma, estilo, gemini_key, criatividade)
+                
+                # Exibição de Resumo
+                st.divider()
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.success("🪝 Gancho de Texto")
+                    st.subheader(res['hook_texto'])
+                with col2:
+                    st.info("👁️ Gancho Visual")
+                    st.write(res['hook_visual'])
 
-if "guiao" in st.session_state:
-    res = st.session_state.guiao
-    
-    st.subheader("📝 Edita o teu roteiro")
-    df_editado = st.data_editor(pd.DataFrame(res['cenas']), use_container_width=True)
-    
-    st.divider()
-    
-    if st.button("🎨 2. Gerar Storyboard Visual (IA)"):
-        with st.spinner("A desenhar as tuas cenas..."):
-            colunas_img = st.columns(len(df_editado))
-            for i, row in df_editado.iterrows():
-                with colunas_img[i]:
-                    st.caption(f"Cena {row['Cena']}")
-                    img_url = gerar_imagem_storyboard(row['Prompt_Imagem_Dalle'], vibe_visual, api_key)
-                    st.image(img_url, use_column_width=True)
-                    st.info(f"🎥 {row['Plano']}")
+                # Tabela Editável (O teu Excel 2.0)
+                st.subheader("📝 Storyboard Detalhado (Podes editar qualquer célula!)")
+                df = pd.DataFrame(res['cenas'])
+                df_final = st.data_editor(df, use_container_width=True, num_rows="dynamic")
+                
+                st.warning(f"📣 **CTA Sugerido:** {res['cta']}")
 
-# Rodapé informando sobre custos
-st.sidebar.warning("⚠️ Nota: O DALL-E 3 tem um custo por imagem gerada na tua conta OpenAI.")
+                # Botão de Exportar
+                csv = df_final.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="💾 Descarregar para Excel (CSV)",
+                    data=csv,
+                    file_name="guiao_gemini.csv",
+                    mime="text/csv",
+                )
+                
+            except Exception as e:
+                st.error(f"Erro ao processar: {e}")
+
+# --- DICA DE STORYBOARD ---
+st.divider()
+st.caption("Dica: Copia a coluna 'Vídeo' para um gerador de imagem se quiseres referências visuais!")
